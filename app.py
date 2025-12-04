@@ -314,6 +314,24 @@ def chat_with_ai():
         print(f"Groq API Error: {e}")
         return jsonify({"error": "AI service unavailable"}), 500
 
+@app.route('/firebase-config', methods=['GET'])
+def get_firebase_config():
+    """
+    Returns the Firebase web config stored in FIREBASE_WEB_CONFIG.
+    This keeps config out of GitHub but it will still be visible
+    in the browser Network tab (which is fine for Firebase).
+    """
+    cfg = os.environ.get("FIREBASE_WEB_CONFIG")
+    if not cfg:
+        return jsonify({"error": "FIREBASE_WEB_CONFIG not set"}), 500
+
+    try:
+        return jsonify(json.loads(cfg))
+    except Exception as e:
+        print("Error parsing FIREBASE_WEB_CONFIG:", e)
+        return jsonify({"error": "Bad FIREBASE_WEB_CONFIG format"}), 500
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
+
