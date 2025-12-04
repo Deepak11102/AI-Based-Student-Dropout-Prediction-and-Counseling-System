@@ -8,6 +8,7 @@ from firebase_admin import credentials, db
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import os
+import json
 import requests
 import smtplib
 from email.mime.text import MIMEText
@@ -20,34 +21,38 @@ CORS(app)
 # 1. CONFIGURATION
 # ==========================================
 # --- GROQ API CONFIGURATION ---
-# UPDATED: Using the model from your image
-GROQ_API_KEY = "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" 
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL = "llama-3.3-70b-versatile" 
+GROQ_MODEL = "llama-3.3-70b-versatile"
 
 # --- EMAIL CONFIGURATION ---
-# ⚠️ Ensure you generate a specific 'App Password' for Gmail if 2FA is on.
-SENDER_EMAIL = "deepakkumar201120@gmail.com" 
-SENDER_PASSWORD = "cdfm nrdo dmwv atou" 
+SENDER_EMAIL = os.environ.get("SENDER_EMAIL")
+SENDER_PASSWORD = os.environ.get("SENDER_EMAIL_PASSWORD")  # Gmail App Password
+
+# Simple sanity check (optional but helpful)
+if not GROQ_API_KEY:
+    print("⚠️ GROQ_API_KEY is not set in environment variables.")
+if not SENDER_EMAIL or not SENDER_PASSWORD:
+    print("⚠️ Email credentials (SENDER_EMAIL / SENDER_EMAIL_PASSWORD) are not set.")
 
 # ==========================================
 # 2. FIREBASE SETUP
 # ==========================================
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-cred_path = os.path.join(BASE_DIR, "serviceAccountKey.json")
-database_url = "https://ai-dropout-system-default-rtdb.firebaseio.com/"
+FIREBASE_DB_URL = os.environ.get("FIREBASE_DB_URL", "https://ai-dropout-system-default-rtdb.firebaseio.com/")
+FIREBASE_CRED_PATH = os.environ.get("FIREBASE_CRED_PATH", "/etc/secrets/firebase-key.json")
 
-if os.path.exists(cred_path):
+if os.path.exists(FIREBASE_CRED_PATH):
     if not firebase_admin._apps:
-        cred = credentials.Certificate(cred_path)
+        cred = credentials.Certificate(FIREBASE_CRED_PATH)
         firebase_admin.initialize_app(cred, {
-            'databaseURL': database_url
+            'databaseURL': FIREBASE_DB_URL
         })
-        print(f"✅ Firebase Admin Connected: {cred_path}")
+        print(f"✅ Firebase Admin Connected: {FIREBASE_CRED_PATH}")
     else:
-         print("✅ Firebase already initialized.")
+        print("✅ Firebase already initialized.")
 else:
-    print(f"❌ ERROR: 'serviceAccountKey.json' NOT FOUND at {cred_path}")
+    print(f"❌ ERROR: Firebase credential file NOT FOUND at {FIREBASE_CRED_PATH}")
+
 
 # Global variables
 model = None
