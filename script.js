@@ -25,22 +25,36 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
 
 // ==========================================
-// REPLACE WITH YOUR FIREBASE CONFIG
+// BACKEND URL (Render)
 // ==========================================
-const firebaseConfig = {
-    apiKey: "AIzaSyBw9fuKvHh7R_NvNIfoJOHpRe8bKo78il8", 
-    authDomain: "ai-dropout-system.firebaseapp.com",
-    databaseURL: "https://ai-dropout-system-default-rtdb.firebaseio.com/",
-    projectId: "ai-dropout-system",
-    storageBucket: "ai-dropout-system.appspot.com",
-    messagingSenderId: "213229509583",
-    appId: "1:213229509583:web:e4ec64bd2bb23df0d650ba"
-};
+const BACKEND_URL = "https://project-sentinel-zegz.onrender.com";
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getDatabase(app);
+// ==========================================
+// Firebase (lazy init from backend)
+// ==========================================
+let app = null;
+let auth = null;
+let db = null;
+
+async function initFirebase() {
+    try {
+        const res = await fetch(`${BACKEND_URL}/firebase-config`);
+        if (!res.ok) throw new Error("Failed to load firebase config");
+        const firebaseConfig = await res.json();
+
+        app = initializeApp(firebaseConfig);
+        auth = getAuth(app);
+        db = getDatabase(app);
+
+        console.log("✅ Firebase initialized from backend config");
+
+        // After Firebase is ready, start the app logic
+        startApp();
+    } catch (err) {
+        console.error("Firebase init error:", err);
+        alert("Error initializing app. Please try again later.");
+    }
+}
 
 // ==========================================
 // 2. GLOBAL STATE & RISK ENGINE
@@ -58,7 +72,7 @@ const AppState = {
 // API Helper for Python Backend
 async function fetchRiskAssessment(student, sentimentScore) {
     try {
-        const response = await fetch('http://localhost:5000/predict_risk', {
+        const response = await fetch(`${BACKEND_URL}/predict_risk`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -96,49 +110,56 @@ const riskEngine = new RiskEngine();
 // ==========================================
 // 3. AUTHENTICATION & ROUTING
 // ==========================================
-
-// Monitor Auth State
-onAuthStateChanged(auth, user => {
-    if (user && user.email) {
-        AppState.activeUser = user;
-        document.getElementById('login-screen').classList.add('hidden');
-        
-        if (user.email.includes('@counselor.com') || user.email.includes('@college.edu')) {
-            document.getElementById('counselor-dashboard').classList.remove('hidden');
-            setupCounselorDashboard();
+function startApp() {
+    // Monitor Auth State
+    onAuthStateChanged(auth, user => {
+        if (user && user.email) {
+            AppState.activeUser = user;
+            document.getElementById('login-screen').classList.add('hidden');
+            
+            if (user.email.includes('@counselor.com') || user.email.includes('@college.edu')) {
+                document.getElementById('counselor-dashboard').classList.remove('hidden');
+                setupCounselorDashboard();
+            } else {
+                document.getElementById('student-dashboard').classList.remove('hidden');
+                renderStudentDashboard(user.uid);
+            }
         } else {
-            document.getElementById('student-dashboard').classList.remove('hidden');
-            renderStudentDashboard(user.uid);
+            AppState.activeUser = null;
+            document.getElementById('counselor-dashboard').classList.add('hidden');
+            document.getElementById('student-dashboard').classList.add('hidden');
+            document.getElementById('login-screen').classList.remove('hidden');
+            
+            // Reset views
+            document.getElementById('portal-initial-view').classList.remove('hidden');
+            document.getElementById('counselor-login-view').classList.add('hidden');
+            document.getElementById('student-login-view').classList.add('hidden');
+            
+            const errStudent = document.getElementById('login-error-student');
+            const errCounselor = document.getElementById('login-error-counselor');
+            if(errStudent) errStudent.classList.add('hidden');
+            if(errCounselor) errCounselor.classList.add('hidden');
         }
-    } else {
-        AppState.activeUser = null;
-        document.getElementById('counselor-dashboard').classList.add('hidden');
-        document.getElementById('student-dashboard').classList.add('hidden');
-        document.getElementById('login-screen').classList.remove('hidden');
-        
-        // Reset views
-        document.getElementById('portal-initial-view').classList.remove('hidden');
-        document.getElementById('counselor-login-view').classList.add('hidden');
-        document.getElementById('student-login-view').classList.add('hidden');
-        
-        const errStudent = document.getElementById('login-error-student');
-        const errCounselor = document.getElementById('login-error-counselor');
-        if(errStudent) errStudent.classList.add('hidden');
-        if(errCounselor) errCounselor.classList.add('hidden');
+    });
+
+    window.handleLogout = () => signOut(auth);
+
+    // Handle Login/Signup Form Submission
+    const counselorForm = document.getElementById('counselor-login-form');
+    const studentForm = document.getElementById('student-login-form');
+
+    if (counselorForm) {
+        counselorForm.onsubmit = (e) => { 
+            e.preventDefault(); 
+            handleAuth(e, 'counselor'); 
+        };
     }
-});
-
-window.handleLogout = () => signOut(auth);
-
-// Handle Login/Signup Form Submission
-const counselorForm = document.getElementById('counselor-login-form');
-const studentForm = document.getElementById('student-login-form');
-
-if (counselorForm) {
-    counselorForm.onsubmit = (e) => { e.preventDefault(); handleAuth(e, 'counselor'); };
-}
-if (studentForm) {
-    studentForm.onsubmit = (e) => { e.preventDefault(); handleAuth(e, 'student'); };
+    if (studentForm) {
+        studentForm.onsubmit = (e) => { 
+            e.preventDefault(); 
+            handleAuth(e, 'student'); 
+        };
+    }
 }
 
 function handleAuth(e, role) {
@@ -570,7 +591,7 @@ window.handleEmailAction = async (type, email, name) => {
     btn.disabled = true;
 
     try {
-        const response = await fetch('http://localhost:5000/send_email', {
+        const response = await fetch(`${BACKEND_URL}/send_email`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -766,7 +787,7 @@ async function setupChatbot(student) {
         try {
             // 3. Send to Python Backend (which calls Groq)
             // Make sure your app.py is running on port 5000
-            const res = await fetch('http://localhost:5000/chat', {
+            const res = await fetch(`${BACKEND_URL}/chat`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
@@ -836,4 +857,10 @@ window.startStudentScanner = () => {
         document.getElementById('student-reader').classList.add('hidden');
         document.getElementById('stop-scan-btn').classList.add('hidden');
     });
+
 };
+
+// Bootstraps the app once the HTML is loaded
+document.addEventListener('DOMContentLoaded', () => {
+    initFirebase();
+});
