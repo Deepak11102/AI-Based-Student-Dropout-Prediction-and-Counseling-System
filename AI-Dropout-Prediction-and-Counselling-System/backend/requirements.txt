@@ -1,0 +1,10 @@
+flask
+flask-cors
+firebase-admin
+numpy
+pandas
+xgboost
+lime
+requests
+gunicorn
+scikit-learn
